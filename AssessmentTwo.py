@@ -1,5 +1,6 @@
 import requests
 import os
+import csv
 from dotenv import load_dotenv
 
 # Load Jira credentials from .env file
@@ -8,8 +9,8 @@ load_dotenv('credentials.env')
 JIRA_BASE_URL = os.getenv('atlassian_url')
 JIRA_API_TOKEN = os.getenv('atlassian_api_token')
 
-CUSTOM_FIELD_ID = "description"
-CUSTOM_FIELD_NAME = "description"
+CUSTOM_FIELD_ID = 'description'
+CUSTOM_FIELD_NAME = 'description'
 
 # Set up authentication header
 headers = {
@@ -17,10 +18,10 @@ headers = {
     "Authorization": f"Bearer {JIRA_API_TOKEN}"
 }
 
-# Count the usage of a custom field
+# Count the usage of a custom field per project
 start_at = 0
 max_results = 100
-total_usage = 0
+project_usage = {}
 
 while True:
     # Jira JQL to search for issues containing the custom field
@@ -30,7 +31,7 @@ while True:
         'jql': jql_query,
         'startAt': start_at,
         'maxResults': max_results,
-        'fields': CUSTOM_FIELD_ID
+        'fields': f"project,{CUSTOM_FIELD_ID}"
     }
 
     response = requests.get(search_url, headers=headers, params=params)
@@ -41,12 +42,25 @@ while True:
 
     data = response.json()
     issues = data.get('issues', [])
-    total_usage += len(issues)
 
-    # Check if there are more issues to fetch
+    for issue in issues:
+        project_key = issue['fields']['project']['key']
+        if project_key in project_usage:
+            project_usage[project_key] += 1
+        else:
+            project_usage[project_key] = 1
+
     if len(issues) < max_results:
         break
 
     start_at += max_results
 
-print(f"Total usage of custom field {CUSTOM_FIELD_NAME}: {total_usage}")
+# Write the usage report per project to a CSV file
+csv_file = f'{CUSTOM_FIELD_NAME}_field_usage.csv'
+with open(csv_file, mode='w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(['Project Key', 'Usage Count'])
+    for project, usage in project_usage.items():
+        writer.writerow([project, usage])
+
+print(f"Report written to {csv_file}")
